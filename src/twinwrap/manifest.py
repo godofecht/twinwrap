@@ -86,7 +86,7 @@ def load(root: Path | str = ".") -> Manifest:
     if not path.exists():
         raise ManifestError(f"no {FILENAME} in {root}; run `twinwrap init` first")
     try:
-        data = tomllib.loads(path.read_text())
+        data = tomllib.loads(path.read_text(encoding="utf-8"))
     except tomllib.TOMLDecodeError as e:
         raise ManifestError(f"{path}: {e}") from e
     return from_dict(root, data)
@@ -169,10 +169,10 @@ def from_dict(root: Path, data: dict) -> Manifest:
 def set_version(root: Path, version: str) -> None:
     """Rewrite [package] version in place, leaving the rest of the file alone."""
     path = Path(root) / FILENAME
-    text = path.read_text()
+    text = path.read_text(encoding="utf-8")
     new, n = re.subn(
         r'(?ms)^(\[package\][^\[]*?^version\s*=\s*)"[^"]*"', rf'\g<1>"{version}"', text, count=1
     )
     if n != 1:
         raise ManifestError(f"could not find [package] version in {path}")
-    path.write_text(new)
+    path.write_text(new, encoding="utf-8")

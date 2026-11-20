@@ -22,7 +22,7 @@ import array, json, struct, sys
 sys.path.insert(0, sys.argv[1])
 import importlib
 mod = importlib.import_module(sys.argv[2])
-cases = json.load(open(sys.argv[3]))
+cases = json.load(open(sys.argv[3], encoding="utf-8"))
 
 def canon(v, t):
     kind, elem = t
@@ -130,13 +130,13 @@ def _canon_expect(v, kind: str, elem: str | None):
 
 def _run_python(m: Manifest, python: str, py_dir: Path | None, cases: list[dict], tdp: Path) -> list[dict]:
     cf = tdp / "cases.json"
-    cf.write_text(json.dumps(cases))
-    (tdp / "run.py").write_text(PY_RUNNER)
+    cf.write_text(json.dumps(cases), encoding="utf-8")
+    (tdp / "run.py").write_text(PY_RUNNER, encoding="utf-8")
     # An empty path entry keeps the installed package (wheel mode) in charge.
     path_arg = str(py_dir) if py_dir else str(tdp / "empty")
     (tdp / "empty").mkdir(exist_ok=True)
     py = subprocess.run([python, "-I", str(tdp / "run.py"), path_arg, m.import_name, str(cf)],
-                        capture_output=True, text=True)
+                        capture_output=True, text=True, encoding="utf-8", errors="replace")
     if py.returncode != 0:
         raise RuntimeError(f"Python test run failed:\n{py.stderr}")
     return json.loads(py.stdout.strip().splitlines()[-1])
@@ -144,10 +144,10 @@ def _run_python(m: Manifest, python: str, py_dir: Path | None, cases: list[dict]
 
 def _run_node(npm_dir: Path, cases: list[dict], tdp: Path) -> list[dict]:
     cf = tdp / "cases.json"
-    cf.write_text(json.dumps(cases))
-    (tdp / "run.js").write_text(JS_RUNNER)
+    cf.write_text(json.dumps(cases), encoding="utf-8")
+    (tdp / "run.js").write_text(JS_RUNNER, encoding="utf-8")
     js = subprocess.run(["node", str(tdp / "run.js"), str(npm_dir.resolve()), str(cf)],
-                        capture_output=True, text=True)
+                        capture_output=True, text=True, encoding="utf-8", errors="replace")
     if js.returncode != 0:
         raise RuntimeError(f"Node test run failed:\n{js.stderr}")
     return json.loads(js.stdout.strip().splitlines()[-1])
@@ -192,12 +192,12 @@ def emit(results: list[Result], path: Path) -> None:
     path.write_text(json.dumps(
         [{"call": r.call, "args": r.args, "python": r.python, "node": r.node} for r in results],
         indent=1,
-    ))
+    ), encoding="utf-8")
 
 
 def against_wheel(m: Manifest, wheel: Path, reference: Path) -> list[Result]:
     """Install ``wheel`` in a fresh venv and compare with reference results."""
-    ref = json.loads(reference.read_text())
+    ref = json.loads(reference.read_text(encoding="utf-8"))
     cases = _cases(m)
     if len(ref) != len(cases) or any(r["call"] != c["call"] for r, c in zip(ref, cases)):
         raise RuntimeError(f"{reference} was made from a different test list")
@@ -207,7 +207,7 @@ def against_wheel(m: Manifest, wheel: Path, reference: Path) -> list[Result]:
         subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
         py = venv / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
         inst = subprocess.run([str(py), "-m", "pip", "install", "-q", "--no-deps", str(wheel)],
-                              capture_output=True, text=True)
+                              capture_output=True, text=True, encoding="utf-8", errors="replace")
         if inst.returncode != 0:
             raise RuntimeError(f"pip could not install {wheel.name}:\n{inst.stderr}")
         got = _run_python(m, str(py), None, cases, tdp)

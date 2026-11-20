@@ -33,7 +33,7 @@ def _get_json(url: str) -> tuple[int, dict | None]:
 
 def _out(cmd: list[str], cwd: Path | None = None) -> str:
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, cwd=cwd, timeout=60)
+        p = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", cwd=cwd, timeout=60)
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return ""
     return p.stdout.strip() if p.returncode == 0 else ""
@@ -95,10 +95,10 @@ def cmd_doctor(args) -> int:
     if not wf.exists():
         _line(WARN, f"no .github/workflows/{lay.workflow_file}; run `twinwrap workflow`")
     else:
-        spec = re.search(r'TWINWRAP: "([^"]*)"', wf.read_text())
+        spec = re.search(r'TWINWRAP: "([^"]*)"', wf.read_text(encoding="utf-8"))
         current = ci.workflow(m, spec.group(1) if spec else "", lay)
-        _line(OK if wf.read_text() == current else WARN,
-              f"{lay.workflow_file} is current" if wf.read_text() == current
+        _line(OK if wf.read_text(encoding="utf-8") == current else WARN,
+              f"{lay.workflow_file} is current" if wf.read_text(encoding="utf-8") == current
               else f"{lay.workflow_file} differs from what this twinwrap generates; run `twinwrap workflow`")
 
     slug = _github_slug(m.repository)
@@ -145,7 +145,7 @@ def cmd_doctor(args) -> int:
 
 
 def _git(root: Path, *a: str, check: bool = True) -> str:
-    p = subprocess.run(["git", *a], cwd=root, capture_output=True, text=True)
+    p = subprocess.run(["git", *a], cwd=root, capture_output=True, text=True, encoding="utf-8", errors="replace")
     if check and p.returncode != 0:
         raise RuntimeError(f"git {' '.join(a)} failed:\n{p.stderr.strip()}")
     return p.stdout.strip()

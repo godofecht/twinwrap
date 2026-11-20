@@ -111,7 +111,7 @@ RUST_TYPES = {k: k for k in SCALARS}
 
 
 def rust_crate_ident(crate_dir: Path) -> str:
-    data = tomllib.loads((crate_dir / "Cargo.toml").read_text())
+    data = tomllib.loads((crate_dir / "Cargo.toml").read_text(encoding="utf-8"))
     lib = data.get("lib") or {}
     name = lib.get("name") or (data.get("package") or {}).get("name")
     if not name:
@@ -120,7 +120,7 @@ def rust_crate_ident(crate_dir: Path) -> str:
 
 
 def rust_package_name(crate_dir: Path) -> str:
-    return tomllib.loads((crate_dir / "Cargo.toml").read_text())["package"]["name"]
+    return tomllib.loads((crate_dir / "Cargo.toml").read_text(encoding="utf-8"))["package"]["name"]
 
 
 def rust_cargo_toml(m: Manifest, crate_dir: Path) -> str:

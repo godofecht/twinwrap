@@ -85,7 +85,7 @@ def _module_files(crate: Path, lib: Path) -> list[tuple[str, Path]]:
         if not file.exists() or any(f == file for _, f in seen):
             return
         seen.append((path, file))
-        top = _top_level(_strip_rust(file.read_text()))
+        top = _top_level(_strip_rust(file.read_text(encoding="utf-8")))
         here = file.parent if file.name in ("lib.rs", "mod.rs", "main.rs") else file.parent / file.stem
         for m in re.finditer(r"\bpub\s+mod\s+([A-Za-z_]\w*)\s*;", top):
             name = m.group(1)
@@ -101,7 +101,7 @@ def _module_files(crate: Path, lib: Path) -> list[tuple[str, Path]]:
 
 def scan_rust(crate: Path) -> list[Found]:
     lib = crate / "src" / "lib.rs"
-    data = tomllib.loads((crate / "Cargo.toml").read_text())
+    data = tomllib.loads((crate / "Cargo.toml").read_text(encoding="utf-8"))
     custom = (data.get("lib") or {}).get("path")
     if custom:
         lib = crate / custom
@@ -109,7 +109,7 @@ def scan_rust(crate: Path) -> list[Found]:
         return []
     found: list[Found] = []
     for modpath, file in _module_files(crate, lib):
-        text = _top_level(_strip_rust(file.read_text()))
+        text = _top_level(_strip_rust(file.read_text(encoding="utf-8")))
         for f in _scan_rust_text(text):
             f.rust_path = f"{modpath}::{f.name}" if modpath else ""
             found.append(f)
@@ -172,7 +172,7 @@ _FLOW_FN = re.compile(r"^(?:export\s+|pub\s+)?function\s+([A-Za-z]\w*)\s*\(([^)]
 
 def scan_flow(path: Path) -> list[Found]:
     found: list[Found] = []
-    for m in _FLOW_FN.finditer(path.read_text()):
+    for m in _FLOW_FN.finditer(path.read_text(encoding="utf-8")):
         name, params_s, ret = m.group(1), m.group(2), (m.group(3) or "").strip()
         if name == "main":
             continue
@@ -266,7 +266,7 @@ def _git_remote(root: Path) -> str:
     cfg = root / ".git" / "config"
     if not cfg.exists():
         return ""
-    m = re.search(r'\[remote "origin"\][^\[]*url\s*=\s*(\S+)', cfg.read_text())
+    m = re.search(r'\[remote "origin"\][^\[]*url\s*=\s*(\S+)', cfg.read_text(encoding="utf-8"))
     if not m:
         return ""
     url = m.group(1)
@@ -292,7 +292,7 @@ def cmd_init(args) -> int:
     if lang == "rust":
         crate = (root / (args.source or ".")).resolve()
         found = scan_rust(crate)
-        default_name = tomllib.loads((crate / "Cargo.toml").read_text())["package"]["name"]
+        default_name = tomllib.loads((crate / "Cargo.toml").read_text(encoding="utf-8"))["package"]["name"]
         source = str(crate.relative_to(root)) if crate.is_relative_to(root) else str(crate)
         source = source if source != "" else "."
     else:
@@ -313,7 +313,7 @@ def cmd_init(args) -> int:
     print(f"twinwrap: wrote {target.name} with {ok} function(s)"
           + (f"; skipped {len(found) - ok}" if len(found) > ok else ""))
     gi = root / ".gitignore"
-    lines = gi.read_text().splitlines() if gi.exists() else []
+    lines = gi.read_text(encoding="utf-8").splitlines() if gi.exists() else []
     if ".twinwrap/" not in lines:
-        gi.write_text("\n".join(lines + [".twinwrap/"]) + "\n")
+        gi.write_text("\n".join(lines + [".twinwrap/"]) + "\n", encoding="utf-8")
     return 0

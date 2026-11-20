@@ -92,7 +92,7 @@ def _readme(m: Manifest) -> str:
     for n in ("README.md", "readme.md"):
         p = m.root / n
         if p.exists():
-            return p.read_text()
+            return p.read_text(encoding="utf-8")
     return ""
 
 
@@ -110,8 +110,8 @@ def python_package_dir(m: Manifest, native: Path, dest: Path) -> Path:
     if pkg.exists():
         shutil.rmtree(pkg)
     (pkg / "_native").mkdir(parents=True)
-    (pkg / "__init__.py").write_text(pygen.python_module(m, ABI_VERSION))
-    (pkg / "py.typed").write_text("")
+    (pkg / "__init__.py").write_text(pygen.python_module(m, ABI_VERSION), encoding="utf-8")
+    (pkg / "py.typed").write_text("", encoding="utf-8")
     shutil.copy2(native, pkg / "_native" / native.name)
     return pkg
 
@@ -187,18 +187,18 @@ def npm_dir(m: Manifest, wasm: Path, dest: Path, *, scoped: str | None = None) -
     dest.mkdir(parents=True)
     registry = "https://npm.pkg.github.com" if scoped else None
     pj = npm_package_json(m, scoped, registry)
-    (dest / "package.json").write_text(json.dumps(pj, indent=2) + "\n")
-    (dest / "index.js").write_text(jsgen.js_module(m, ABI_VERSION))
-    (dest / "index.d.ts").write_text(jsgen.dts(m))
+    (dest / "package.json").write_text(json.dumps(pj, indent=2) + "\n", encoding="utf-8")
+    (dest / "index.js").write_text(jsgen.js_module(m, ABI_VERSION), encoding="utf-8")
+    (dest / "index.d.ts").write_text(jsgen.dts(m), encoding="utf-8")
     shutil.copy2(wasm, dest / wasm.name)
     readme = _readme(m)
-    (dest / "README.md").write_text(readme or f"# {m.name}\n\n{m.description}\n")
+    (dest / "README.md").write_text(readme or f"# {m.name}\n\n{m.description}\n", encoding="utf-8")
     lic = _license_file(m)
     if lic:
         shutil.copy2(lic, dest / "LICENSE")
     else:
         pj["files"].remove("LICENSE")
-        (dest / "package.json").write_text(json.dumps(pj, indent=2) + "\n")
+        (dest / "package.json").write_text(json.dumps(pj, indent=2) + "\n", encoding="utf-8")
     return dest
 
 
@@ -206,7 +206,7 @@ def npm_check(dest: Path, m: Manifest) -> list[str]:
     """Files `npm pack` would include. Raises if a runtime file is missing."""
     out = subprocess.run(
         ["npm", "pack", "--dry-run", "--json", "--ignore-scripts"],
-        cwd=dest, capture_output=True, text=True,
+        cwd=dest, capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if out.returncode != 0:
         raise PackageError(f"npm pack failed:\n{out.stderr}")
@@ -222,7 +222,7 @@ def npm_tarball(dest: Path, out_dir: Path) -> Path:
     out_dir.mkdir(parents=True, exist_ok=True)
     res = subprocess.run(
         ["npm", "pack", "--json", "--ignore-scripts", "--pack-destination", str(out_dir)],
-        cwd=dest, capture_output=True, text=True,
+        cwd=dest, capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if res.returncode != 0:
         raise PackageError(f"npm pack failed:\n{res.stderr}")

@@ -29,7 +29,7 @@ def work_dir(m: Manifest) -> Path:
     d.mkdir(exist_ok=True)
     gi = d / ".gitignore"
     if not gi.exists():
-        gi.write_text("*\n")
+        gi.write_text("*\n", encoding="utf-8")
     return d
 
 
@@ -39,7 +39,7 @@ def run(cmd: list[str], *, cwd: Path | None = None, env: dict | None = None, qui
         print(f"  $ {shown}", file=sys.stderr)
     p = subprocess.run(
         [str(c) for c in cmd], cwd=cwd, env={**os.environ, **(env or {})},
-        capture_output=True, text=True,
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     if p.returncode != 0:
         tail = "\n".join((p.stdout + p.stderr).strip().splitlines()[-40:])
@@ -137,7 +137,7 @@ def flow_emit(m: Manifest) -> Path:
         [flow, "tool", "compiler/scripts/flowc_emit.flow", "--library", "--export", names, m.source, raw],
         cwd=flow.resolve().parent,
     )
-    text = raw.read_text()
+    text = raw.read_text(encoding="utf-8")
     missing = [f.name for f in m.functions if f"flow_export_{f.name}(" not in text]
     if missing:
         hints = "\n".join("  " + glue.flow_expected_signature(m.function(n)) for n in missing)
@@ -145,9 +145,9 @@ def flow_emit(m: Manifest) -> Path:
             f"{m.source.name} does not define {', '.join(missing)}. Expected:\n{hints}"
         )
     unit = d / f"{m.lib_name}.c"
-    unit.write_text(text + glue.flow_glue(m))
-    (d / "wasi_compat.h").write_text(glue.WASI_COMPAT_H)
-    (d / f"{m.lib_name}.h").write_text(glue.c_header(m))
+    unit.write_text(text + glue.flow_glue(m), encoding="utf-8")
+    (d / "wasi_compat.h").write_text(glue.WASI_COMPAT_H, encoding="utf-8")
+    (d / f"{m.lib_name}.h").write_text(glue.c_header(m), encoding="utf-8")
     return unit
 
 
@@ -191,9 +191,9 @@ def flow_wasm(m: Manifest, unit: Path) -> Path:
 def rust_glue_crate(m: Manifest) -> Path:
     d = work_dir(m) / "glue"
     d.mkdir(exist_ok=True)
-    (d / "Cargo.toml").write_text(glue.rust_cargo_toml(m, m.source))
-    (d / "lib.rs").write_text(glue.rust_glue(m, m.source))
-    (d / f"{m.lib_name}.h").write_text(glue.c_header(m))
+    (d / "Cargo.toml").write_text(glue.rust_cargo_toml(m, m.source), encoding="utf-8")
+    (d / "lib.rs").write_text(glue.rust_glue(m, m.source), encoding="utf-8")
+    (d / f"{m.lib_name}.h").write_text(glue.c_header(m), encoding="utf-8")
     return d
 
 

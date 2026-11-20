@@ -141,7 +141,7 @@ def cmd_workflow(args) -> int:
         print(text, end="")
         return 0
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text)
+    path.write_text(text, encoding="utf-8")
     print(f"twinwrap: wrote {path}")
     return 0
 
