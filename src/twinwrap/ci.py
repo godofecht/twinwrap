@@ -164,6 +164,11 @@ on:
 permissions:
   contents: read
 
+# bash on every runner, Windows included, so $VARS and globs mean one thing.
+defaults:
+  run:
+    shell: bash
+
 env:
   TWINWRAP: "{twinwrap_spec}"
   FLOW_REF: "{FLOW_REF}"
