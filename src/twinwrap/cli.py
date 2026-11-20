@@ -109,8 +109,10 @@ def _short(d: dict) -> str:
 def cmd_check_tag(args) -> int:
     m = _load(args)
     tag = args.tag.removeprefix("refs/tags/")
-    if tag != f"v{m.version}":
-        print(f"twinwrap: tag {tag} does not match twinwrap.toml version {m.version}", file=sys.stderr)
+    want = f"{ci.layout(m).tag_prefix}{m.version}"
+    if tag != want:
+        print(f"twinwrap: tag {tag} does not match twinwrap.toml version {m.version} (want {want})",
+              file=sys.stderr)
         return 1
     print(f"twinwrap: tag {tag} matches")
     return 0
@@ -131,14 +133,16 @@ def cmd_npm_dir(args) -> int:
 
 def cmd_workflow(args) -> int:
     m = _load(args)
-    path = m.root / ".github" / "workflows" / "twinwrap.yml"
-    text = ci.workflow(m, args.spec)
+    lay = ci.layout(m)
+    git_root = m.root if lay.at_root else Path(str(m.root)[: -len(lay.rel)].rstrip("/"))
+    path = git_root / ".github" / "workflows" / lay.workflow_file
+    text = ci.workflow(m, args.spec, lay)
     if args.stdout:
         print(text, end="")
         return 0
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
-    print(f"twinwrap: wrote {_rel(m, path)}")
+    print(f"twinwrap: wrote {path}")
     return 0
 
 

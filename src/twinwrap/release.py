@@ -39,6 +39,13 @@ def _out(cmd: list[str], cwd: Path | None = None) -> str:
     return p.stdout.strip() if p.returncode == 0 else ""
 
 
+def _git_root(start: Path) -> Path:
+    for d in [start, *start.parents]:
+        if (d / ".git").exists():
+            return d
+    return start
+
+
 def _github_slug(url: str) -> str:
     m = re.match(r"https://github\.com/([^/]+/[^/]+?)(?:\.git)?/?$", url or "")
     return m.group(1) if m else ""
@@ -83,15 +90,16 @@ def cmd_doctor(args) -> int:
           else "no [[test]] entries: nothing checks that Python and Node agree")
 
     print("workflow")
-    wf = m.root / ".github" / "workflows" / "twinwrap.yml"
+    lay = ci.layout(m)
+    wf = _git_root(m.root) / ".github" / "workflows" / lay.workflow_file
     if not wf.exists():
-        _line(WARN, "no .github/workflows/twinwrap.yml; run `twinwrap workflow`")
+        _line(WARN, f"no .github/workflows/{lay.workflow_file}; run `twinwrap workflow`")
     else:
         spec = re.search(r'TWINWRAP: "([^"]*)"', wf.read_text())
-        current = ci.workflow(m, spec.group(1) if spec else "")
+        current = ci.workflow(m, spec.group(1) if spec else "", lay)
         _line(OK if wf.read_text() == current else WARN,
-              "twinwrap.yml is current" if wf.read_text() == current
-              else "twinwrap.yml differs from what this twinwrap generates; run `twinwrap workflow`")
+              f"{lay.workflow_file} is current" if wf.read_text() == current
+              else f"{lay.workflow_file} differs from what this twinwrap generates; run `twinwrap workflow`")
 
     slug = _github_slug(m.repository)
     print("publishing")
@@ -111,7 +119,7 @@ def cmd_doctor(args) -> int:
             _line(WARN, "PyPI: could not reach pypi.org")
         if code in (200, 404):
             print("         https://pypi.org/manage/account/publishing/")
-            print(f"         owner/repo {slug or '<owner>/<repo>'}, workflow twinwrap.yml, environment pypi")
+            print(f"         owner/repo {slug or '<owner>/<repo>'}, workflow {lay.workflow_file}, environment pypi")
         code, data = _get_json(f"https://registry.npmjs.org/{m.name}")
         me = _out(["npm", "whoami"])
         if code == 404:
@@ -127,7 +135,7 @@ def cmd_doctor(args) -> int:
             _line(WARN, "npm: could not reach registry.npmjs.org")
         if code in (200, 404):
             print(f"         then on https://www.npmjs.com/package/{m.name}/access add a GitHub Actions")
-            print(f"         trusted publisher: {slug or '<owner>/<repo>'}, workflow twinwrap.yml, environment npm,")
+            print(f"         trusted publisher: {slug or '<owner>/<repo>'}, workflow {lay.workflow_file}, environment npm,")
             print("         leaving 'Allow npm publish' unticked so releases are staged for approval")
     print(f"twinwrap doctor: {'no blocking problems' if not bad else f'{bad} blocking problem(s)'}")
     return 1 if bad else 0
@@ -150,20 +158,23 @@ def cmd_release(args) -> int:
     if not re.fullmatch(r"\d+\.\d+\.\d+([.-]?[A-Za-z0-9.]+)?", new):
         print(f"twinwrap: {args.version} is not a version like 1.2.3", file=sys.stderr)
         return 2
-    if not shutil.which("git") or not (root / ".git").exists():
+    git_root = _git_root(root)
+    if not shutil.which("git") or not (git_root / ".git").exists():
         print("twinwrap: release needs a git repository", file=sys.stderr)
         return 2
     dirty = _git(root, "status", "--porcelain")
     if dirty:
         print(f"twinwrap: commit or stash these first:\n{dirty}", file=sys.stderr)
         return 1
-    tag = f"v{new}"
+    lay = ci.layout(m)
+    tag = f"{lay.tag_prefix}{new}"
     if _git(root, "tag", "--list", tag):
         print(f"twinwrap: tag {tag} already exists", file=sys.stderr)
         return 1
-    wf = root / ".github" / "workflows" / "twinwrap.yml"
+    wf = git_root / ".github" / "workflows" / lay.workflow_file
     if not wf.exists():
-        print("twinwrap: no .github/workflows/twinwrap.yml; run `twinwrap workflow` and commit it", file=sys.stderr)
+        print(f"twinwrap: no .github/workflows/{lay.workflow_file}; run `twinwrap workflow` and commit it",
+              file=sys.stderr)
         return 1
 
     if new != m.version:
@@ -193,7 +204,7 @@ def cmd_release(args) -> int:
     slug = _github_slug(m.repository)
     print(f"twinwrap: pushed {tag}")
     if slug:
-        print(f"  workflow:  https://github.com/{slug}/actions/workflows/twinwrap.yml")
+        print(f"  workflow:  https://github.com/{slug}/actions/workflows/{lay.workflow_file}")
     print(f"  PyPI:      https://pypi.org/project/{m.name}/{new}/ (after the workflow finishes)")
     print(f"  npm:       staged; approve it at https://www.npmjs.com/package/{m.name}")
     return 0
