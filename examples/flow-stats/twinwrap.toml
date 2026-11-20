@@ -26,6 +26,9 @@ sig = "fn count_vowels(s: str) -> i32"
 [[function]]
 sig = "fn fib(n: i32) -> i64"
 
+[[function]]
+sig = "fn axpy(a: f64, x: f64, y: f64) -> f64"
+
 [[test]]
 call = "add"
 args = [2, 40]
@@ -53,3 +56,9 @@ expect = 5
 call = "fib"
 args = [90]
 expect = 2880067194370816120
+
+
+[[test]]
+call = "axpy"
+args = [0.1, 10.0, -1.0]
+expect = 0.0

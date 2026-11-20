@@ -11,6 +11,8 @@
     lang = "rust"                  # or "flow"
     path = "."                     # Rust: the crate directory
     # path = "src/lib.flow"        # Flow: the library file
+    # features = ["simd"]          # Rust: Cargo features to enable
+    # default_features = false     # Rust: turn off the crate's defaults
 
     [[function]]
     sig = "fn mean(xs: [f64]) -> f64"
@@ -63,6 +65,8 @@ class Manifest:
     import_name: str = ""
     rust_paths: dict[str, str] = field(default_factory=dict)
     github_scope: str = ""
+    features: list[str] = field(default_factory=list)
+    default_features: bool = True
 
     @property
     def lib_name(self) -> str:
@@ -157,6 +161,8 @@ def from_dict(root: Path, data: dict) -> Manifest:
         import_name=import_name,
         rust_paths=rust_paths,
         github_scope=(data.get("npm") or {}).get("github_scope", ""),
+        features=list(src.get("features", [])),
+        default_features=bool(src.get("default_features", True)),
     )
 
 

@@ -68,3 +68,9 @@ function fib(n: i32) -> i64 {
     }
     return a
 }
+
+# a * x + y. With FMA contraction a native build would round once and
+# disagree with wasm; twinwrap compiles with -ffp-contract=off.
+function axpy(a: f64, x: f64, y: f64) -> f64 {
+    return a * x + y
+}

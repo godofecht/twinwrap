@@ -16,7 +16,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from . import glue
+from . import glue, wasmcheck
 from .manifest import Manifest
 
 
@@ -158,7 +158,9 @@ def flow_native(m: Manifest, unit: Path) -> Path:
         raise BuildError("Flow libraries do not build on Windows yet: the Flow C prelude needs POSIX")
     lib = out / native_filename(m.lib_name)
     cc = os.environ.get("CC", "cc")
-    flags = ["-O2", "-fPIC", "-w"]
+    # No FMA contraction: wasm never fuses a*b+c, so a native build that did
+    # would round differently and break bit-for-bit agreement.
+    flags = ["-O2", "-fPIC", "-w", "-ffp-contract=off"]
     if sys.platform == "darwin":
         flags += ["-dynamiclib", "-install_name", f"@rpath/{lib.name}"]
     else:
@@ -174,7 +176,7 @@ def flow_wasm(m: Manifest, unit: Path) -> Path:
     emu = ["process-clocks", "signal", "getpid"]
     run([
         wasm_clang(), "--target=wasm32-wasip1", f"--sysroot={wasi_sysroot()}",
-        "-mexec-model=reactor", "-O2", "-w",
+        "-mexec-model=reactor", "-O2", "-w", "-ffp-contract=off",
         "-include", unit.parent / "wasi_compat.h",
         *[f"-D_WASI_EMULATED_{e.upper().replace('-', '_')}" for e in emu],
         *wasm_ld_flag(), "-Wl,--strip-debug",
@@ -238,6 +240,18 @@ def rust_wasm(m: Manifest, crate: Path) -> Path:
 # ----------------------------------------------------------------- driver
 
 
+def check_wasm_imports(m: Manifest, wasm: Path) -> None:
+    foreign = sorted({mod for mod, _ in wasmcheck.imports(wasm) if mod != "wasi_snapshot_preview1"})
+    if not foreign:
+        return
+    hint = ""
+    if any("wbindgen" in f for f in foreign):
+        hint = ("\nA dependency uses wasm-bindgen on wasm32 (often getrandom's \"js\" feature). "
+                "Turn off the Cargo features that pull it in with [source] default_features = false "
+                "and features = [...].")
+    raise BuildError(f"{wasm.name} imports {', '.join(foreign)}, which the npm loader cannot supply.{hint}")
+
+
 def build(m: Manifest, *, native: bool = True, wasm: bool = True, target: str | None = None) -> dict[str, Path]:
     built: dict[str, Path] = {}
     if m.lang == "flow":
@@ -252,6 +266,8 @@ def build(m: Manifest, *, native: bool = True, wasm: bool = True, target: str | 
             built["native"] = rust_native(m, crate, target)
         if wasm:
             built["wasm"] = rust_wasm(m, crate)
+    if "wasm" in built:
+        check_wasm_imports(m, built["wasm"])
     return built
 
 

@@ -128,40 +128,93 @@ def _canon_expect(v, kind: str, elem: str | None):
     return str(int(v))
 
 
+def _run_python(m: Manifest, python: str, py_dir: Path | None, cases: list[dict], tdp: Path) -> list[dict]:
+    cf = tdp / "cases.json"
+    cf.write_text(json.dumps(cases))
+    (tdp / "run.py").write_text(PY_RUNNER)
+    # An empty path entry keeps the installed package (wheel mode) in charge.
+    path_arg = str(py_dir) if py_dir else str(tdp / "empty")
+    (tdp / "empty").mkdir(exist_ok=True)
+    py = subprocess.run([python, "-I", str(tdp / "run.py"), path_arg, m.import_name, str(cf)],
+                        capture_output=True, text=True)
+    if py.returncode != 0:
+        raise RuntimeError(f"Python test run failed:\n{py.stderr}")
+    return json.loads(py.stdout.strip().splitlines()[-1])
+
+
+def _run_node(npm_dir: Path, cases: list[dict], tdp: Path) -> list[dict]:
+    cf = tdp / "cases.json"
+    cf.write_text(json.dumps(cases))
+    (tdp / "run.js").write_text(JS_RUNNER)
+    js = subprocess.run(["node", str(tdp / "run.js"), str(npm_dir.resolve()), str(cf)],
+                        capture_output=True, text=True)
+    if js.returncode != 0:
+        raise RuntimeError(f"Node test run failed:\n{js.stderr}")
+    return json.loads(js.stdout.strip().splitlines()[-1])
+
+
+def _same_error(a: str, b: str) -> bool:
+    """Error classes differ by language; the library's message must not."""
+    return a.split(": ", 1)[-1] == b.split(": ", 1)[-1]
+
+
+def _judge(t, c: dict, p: dict, j: dict) -> tuple[bool, str]:
+    if "error" in p or "error" in j:
+        if "error" in p and "error" in j and not t.has_expect:
+            if _same_error(p["error"], j["error"]):
+                return True, ""
+            return False, "both failed, with different messages"
+        return False, f"python: {p.get('error', 'ok')}; node: {j.get('error', 'ok')}"
+    if p["ok"] != j["ok"]:
+        return False, "Python and Node disagree"
+    if t.has_expect:
+        want = _canon_expect(t.expect, *c["ret"])
+        if p["ok"] != want:
+            return False, f"expected {want}"
+    return True, ""
+
+
 def run(m: Manifest, py_dir: Path, npm_dir: Path, python: str = sys.executable) -> list[Result]:
     if not m.tests:
         return []
     cases = _cases(m)
     with tempfile.TemporaryDirectory() as td:
-        tdp = Path(td)
-        cf = tdp / "cases.json"
-        cf.write_text(json.dumps(cases))
-        (tdp / "run.py").write_text(PY_RUNNER)
-        (tdp / "run.js").write_text(JS_RUNNER)
-        py = subprocess.run([python, "-I", str(tdp / "run.py"), str(py_dir), m.import_name, str(cf)],
-                            capture_output=True, text=True)
-        if py.returncode != 0:
-            raise RuntimeError(f"Python test run failed:\n{py.stderr}")
-        js = subprocess.run(["node", str(tdp / "run.js"), str(npm_dir.resolve()), str(cf)],
-                            capture_output=True, text=True)
-        if js.returncode != 0:
-            raise RuntimeError(f"Node test run failed:\n{js.stderr}")
-        py_out = json.loads(py.stdout.strip().splitlines()[-1])
-        js_out = json.loads(js.stdout.strip().splitlines()[-1])
-
+        py_out = _run_python(m, python, py_dir, cases, Path(td))
+        js_out = _run_node(npm_dir, cases, Path(td))
     results = []
     for t, c, p, j in zip(m.tests, cases, py_out, js_out):
-        ok, reason = True, ""
-        if "error" in p or "error" in j:
-            ok = "error" in p and "error" in j and t.has_expect is False
-            reason = f"python: {p.get('error', 'ok')}; node: {j.get('error', 'ok')}"
-            if not ("error" in p and "error" in j):
-                ok = False
-        elif p["ok"] != j["ok"]:
-            ok, reason = False, "Python and Node disagree"
-        elif t.has_expect:
-            want = _canon_expect(t.expect, *c["ret"])
-            if p["ok"] != want:
-                ok, reason = False, f"expected {want}"
+        ok, reason = _judge(t, c, p, j)
         results.append(Result(t.call, t.args, p, j, t.expect, ok, reason))
+    return results
+
+
+def emit(results: list[Result], path: Path) -> None:
+    path.write_text(json.dumps(
+        [{"call": r.call, "args": r.args, "python": r.python, "node": r.node} for r in results],
+        indent=1,
+    ))
+
+
+def against_wheel(m: Manifest, wheel: Path, reference: Path) -> list[Result]:
+    """Install ``wheel`` in a fresh venv and compare with reference results."""
+    ref = json.loads(reference.read_text())
+    cases = _cases(m)
+    if len(ref) != len(cases) or any(r["call"] != c["call"] for r, c in zip(ref, cases)):
+        raise RuntimeError(f"{reference} was made from a different test list")
+    with tempfile.TemporaryDirectory() as td:
+        tdp = Path(td)
+        venv = tdp / "venv"
+        subprocess.run([sys.executable, "-m", "venv", str(venv)], check=True)
+        py = venv / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+        inst = subprocess.run([str(py), "-m", "pip", "install", "-q", "--no-deps", str(wheel)],
+                              capture_output=True, text=True)
+        if inst.returncode != 0:
+            raise RuntimeError(f"pip could not install {wheel.name}:\n{inst.stderr}")
+        got = _run_python(m, str(py), None, cases, tdp)
+    results = []
+    for t, c, g, r in zip(m.tests, cases, got, ref):
+        ok, reason = _judge(t, c, g, r["node"])
+        if ok and g != r["python"] and "error" not in g:
+            ok, reason = False, "differs from the reference platform"
+        results.append(Result(t.call, t.args, g, r["node"], t.expect, ok, reason))
     return results
