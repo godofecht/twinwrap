@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "twinwrap"
-version = "0.1.0"
+version = "0.1.1"
 description = "Wrap a Rust or Flow library for PyPI and npm from one function list."
 readme = "README.md"
 license = "MIT"
