@@ -134,7 +134,7 @@ def workflow(m: Manifest, twinwrap_spec: str, lay: Layout | None = None) -> str:
         run: |
           printf '//npm.pkg.github.com/:_authToken=${{NODE_AUTH_TOKEN}}\\n@{scope}:registry=https://npm.pkg.github.com\\n' > "$RUNNER_TEMP/gh.npmrc"
           export NPM_CONFIG_USERCONFIG="$RUNNER_TEMP/gh.npmrc"
-          twinwrap -C "$GITHUB_WORKSPACE/{lay.rel}" npm-dir --scope @{scope} --out "$RUNNER_TEMP/gh-npm" --wasm "$GITHUB_WORKSPACE/.twinwrap-npm/{m.lib_name}.wasm"
+          python -m twinwrap -C "$GITHUB_WORKSPACE/{lay.rel}" npm-dir --scope @{scope} --out "$RUNNER_TEMP/gh-npm" --wasm "$GITHUB_WORKSPACE/.twinwrap-npm/{m.lib_name}.wasm"
           cd "$RUNNER_TEMP/gh-npm"
           if npm view "@{scope}/{m.name}@$VERSION" version >/dev/null 2>&1; then
             echo "::notice::GitHub Packages already has $VERSION"
@@ -183,12 +183,12 @@ jobs:
 {_toolchain_steps(m, True, lay)}      - name: Install twinwrap
         run: python -m pip install "$TWINWRAP"
       - name: Build both packages
-        run: twinwrap{C} build --out dist
+        run: python -m twinwrap{C} build --out dist
       - name: Python and Node agree
-        run: twinwrap{C} test --no-build --emit reference.json
+        run: python -m twinwrap{C} test --no-build --emit reference.json
       - name: Version matches the tag
         if: startsWith(github.ref, 'refs/tags/{lay.tag_prefix}')
-        run: twinwrap{C} check-tag "$GITHUB_REF_NAME"
+        run: python -m twinwrap{C} check-tag "$GITHUB_REF_NAME"
       - uses: actions/upload-artifact@v4
         with:
           name: reference
@@ -223,10 +223,10 @@ jobs:
       - name: Install twinwrap
         run: python -m pip install "$TWINWRAP"
       - name: Build the wheel
-        run: twinwrap{C} build --python-only --out dist
+        run: python -m twinwrap{C} build --python-only --out dist
       - name: Installed wheel matches the reference bit for bit
         shell: bash
-        run: twinwrap{C} test --wheel {P}dist/*.whl --against reference.json
+        run: python -m twinwrap{C} test --wheel {P}dist/*.whl --against reference.json
       - uses: actions/upload-artifact@v4
         with:
           name: wheel-${{{{ matrix.label }}}}
