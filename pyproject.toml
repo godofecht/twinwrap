@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[project]
+name = "twinwrap"
+version = "0.1.0"
+description = "Wrap a Rust or Flow library for PyPI and npm from one function list."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.11"
+authors = [{ name = "Abhishek Shivakumar" }]
+dependencies = []
+
+[project.scripts]
+twinwrap = "twinwrap.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/twinwrap"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
